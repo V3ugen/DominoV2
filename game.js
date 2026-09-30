@@ -58,10 +58,10 @@ class Game extends Phaser.Scene {
     this.sfx = this.game.sfx || (this.game.sfx = new Sfx());
     this.add.rectangle(W / 2, H / 2, W, H, 0x1a1a1f);
     this.add.text(W / 2, 22, 'ДОМИНО ПО-ОДЕССКИ', { fontFamily: FONT, fontSize: '20px', fontStyle: 'bold', color: '#fff' }).setOrigin(0.5);
-    const bub = this.add.graphics(); bub.fillStyle(0x2a2a35).fillRoundedRect(20, 46, 440, 64, 8);
-    bub.fillStyle(0x007bff).fillRect(20, 46, 4, 64);
-    this.status = this.add.text(W / 2, 78, '', { fontFamily: FONT, fontSize: '16px', fontStyle: 'bold', color: '#fff', align: 'center', wordWrap: { width: 410 } }).setOrigin(0.5);
-    this.botLabel = this.add.text(24, 122, '', { fontFamily: FONT, fontSize: '14px', color: '#aaa' });
+    const bub = this.add.graphics(); bub.fillStyle(0x2a2a35).fillRoundedRect(16, 40, 448, 88, 8);
+    bub.fillStyle(0x007bff).fillRect(16, 40, 5, 88);
+    this.status = this.add.text(W / 2 + 3, 84, '', { fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#fff', align: 'center', wordWrap: { width: 418 } }).setOrigin(0.5);
+    this.botLabel = this.add.text(24, 131, '', { fontFamily: FONT, fontSize: '14px', color: '#aaa' });
     this.botGfx = this.add.graphics();
     const bz = this.add.graphics(); bz.fillStyle(0x111115).fillRoundedRect(10, 190, 460, 380, 8);
     bz.lineStyle(2, 0x3a3a4a).strokeRoundedRect(10, 190, 460, 380, 8);
@@ -88,7 +88,14 @@ class Game extends Phaser.Scene {
     return c;
   }
 
-  say(k, extra = '') { this.status.setText(typeof k === 'string' && SAY[k] ? pick(SAY[k]) + extra : k); }
+  setMsg(txt) {
+    // крупный шрифт; если текст длинный — уменьшаем, пока не влезет в рамку
+    let fs = 22;
+    this.status.setFontSize(fs + 'px').setText(txt);
+    while (this.status.height > 80 && fs > 15) { fs--; this.status.setFontSize(fs + 'px'); }
+  }
+
+  say(k, extra = '') { this.setMsg(typeof k === 'string' && SAY[k] ? pick(SAY[k]) + extra : k); }
 
   makeTile(l, r, x, y) {
     const c = this.add.container(x, y), g = this.add.graphics();
@@ -106,7 +113,7 @@ class Game extends Phaser.Scene {
     for (let i = 0; i <= 6; i++) for (let j = i; j <= 6; j++) deck.push([i, j]);
     for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
     this.hp = deck.splice(0, 7); this.hb = deck.splice(0, 7); this.pool = deck;
-    this.board = []; this.hobj = []; this.over = false; this.busy = true; this.turn = null;
+    this.board = []; this.hobj = []; this.lastHl = null; this.over = false; this.busy = true; this.turn = null;
     this.hp.forEach(t => this.hobj.push(this.makeHandObj(t)));
     this.layoutHand(); this.drawBot(); this.updateButtons();
     this.say('coin');
@@ -119,8 +126,8 @@ class Game extends Phaser.Scene {
       this.tweens.add({ targets: coin, scaleX: -1, duration: 150, yoyo: true, repeat: 5, onComplete: () => {
         coin.setText(res === 'h' ? 'О' : 'Р');
         this.turn = guess === res ? 'p' : 'b';
-        this.status.setText((res === 'h' ? 'Орёл! ' : 'Решка! ') + (this.turn === 'p' ? 'Вы ходите первым, таки везёт!' : 'Первым ходит бот, шоб он был здоров.'));
-        this.time.delayedCall(1300, () => { coin.destroy(); this.busy = false; this.next(true); });
+        this.setMsg((res === 'h' ? 'Орёл! ' : 'Решка! ') + (this.turn === 'p' ? 'Вы ходите первым, таки везёт!' : 'Первым ходит бот, шоб он был здоров.'));
+        this.time.delayedCall(2600, () => { coin.destroy(); this.busy = false; this.next(true); });
       } });
     };
   }
@@ -146,7 +153,7 @@ class Game extends Phaser.Scene {
     const n = this.hb.length, sp = Math.min(30, 420 / Math.max(n, 1));
     for (let i = 0; i < n; i++) {
       const x = W / 2 + (i - (n - 1) / 2) * sp;
-      this.botGfx.fillRoundedRect(x - 10, 142, 20, 36, 3).strokeRoundedRect(x - 10, 142, 20, 36, 3);
+      this.botGfx.fillRoundedRect(x - 10, 152, 20, 34, 3).strokeRoundedRect(x - 10, 152, 20, 34, 3);
     }
   }
 
@@ -168,7 +175,7 @@ class Game extends Phaser.Scene {
     if (this.checkEnd()) return;
     this.updateButtons(); this.layoutHand();
     if (this.turn === 'p') this.say('you');
-    else { this.say('bot'); this.time.delayedCall(1000, () => this.botMove()); }
+    else { this.say('bot'); this.time.delayedCall(2200, () => this.botMove()); }
   }
 
   tap(o) {
@@ -199,16 +206,28 @@ class Game extends Phaser.Scene {
     else this.hb = this.hb.filter(x => x !== t);
     const obj = this.makeTile(l, r, from.x, from.y).setAngle(90).setScale(who === 'p' ? 1.25 : 1);
     const item = { l, r, obj };
+    this.markLast(obj);
     side === 'l' && e ? this.board.unshift(item) : this.board.push(item);
     this.drawBot(); this.renderBoard(true);
     this.sfx.draw();
     this.time.delayedCall(320, () => {
       this.sfx.clack(); this.cameras.main.shake(80, 0.002);
-      this.tweens.add({ targets: obj, scale: { from: 1.15, to: 1 }, duration: 150 });
-      this.busy = false; this.turn = who === 'p' ? 'b' : 'p'; this.layoutHand();
-      this.time.delayedCall(250, () => this.next());
+      this.tweens.add({ targets: obj, scale: { from: who === 'p' ? 1.15 : 1.6, to: 1 }, duration: who === 'p' ? 150 : 350 });
+      this.turn = who === 'p' ? 'b' : 'p';
+      if (who === 'p') { this.busy = false; this.layoutHand(); this.time.delayedCall(250, () => this.next()); }
+      else { this.layoutHand(); this.time.delayedCall(2400, () => { this.busy = false; this.next(); }); } // даём прочитать реплику бота
     });
     this.layoutHand();
+  }
+
+  markLast(obj) {
+    if (this.lastHl) { this.tweens.killTweensOf(this.lastHl); this.lastHl.destroy(); }
+    const hl = this.add.graphics();
+    hl.fillStyle(0xffd400, 0.18).fillRoundedRect(-TL / 2, -TH / 2, TL, TH, 5);
+    hl.lineStyle(6, 0xffd400, 0.28).strokeRoundedRect(-TL / 2 - 3, -TH / 2 - 3, TL + 6, TH + 6, 8);
+    hl.lineStyle(2.5, 0xffd400, 1).strokeRoundedRect(-TL / 2 - 1, -TH / 2 - 1, TL + 2, TH + 2, 6);
+    obj.add(hl); this.lastHl = hl;
+    this.tweens.add({ targets: hl, alpha: { from: 1, to: 0.45 }, duration: 600, yoyo: true, repeat: -1 });
   }
 
   pos(i, n) {
@@ -225,7 +244,8 @@ class Game extends Phaser.Scene {
     });
     if (!n) return;
     const a = this.pos(0, n), b = this.pos(n - 1, n);
-    this.markL.setPosition(a.x, a.y - 24).setVisible(true); this.markR.setPosition(b.x, b.y + 24).setVisible(true);
+    const oa = this.board[0].l === this.board[0].r ? 40 : 26, ob = this.board[n - 1].l === this.board[n - 1].r ? 40 : 26;
+    this.markL.setPosition(a.x, a.y - oa).setVisible(true); this.markR.setPosition(b.x, b.y + ob).setVisible(true);
   }
 
   botMove() {
@@ -235,15 +255,15 @@ class Game extends Phaser.Scene {
       opts.sort((a, b) => pips(b) - pips(a));
       const t = opts[0], e = this.ends(), cl = e && (t[0] === e.l || t[1] === e.l), cr = !e || t[0] === e.r || t[1] === e.r;
       const side = cr && (!cl || Math.random() < 0.5) ? 'r' : 'l';
-      this.say('botPlay');
-      const ho = this.makeTile(t[0], t[1], W / 2, 160).setVisible(false); ho.tile = t;
+      this.say('botPlay', '\n➜ Бот поставил [' + t[0] + '|' + t[1] + ']' + (e ? (side === 'l' ? ' слева' : ' справа') : ''));
+      const ho = this.makeTile(t[0], t[1], W / 2, 168).setVisible(false); ho.tile = t;
       return this.place('b', ho, side);
     }
     if (this.pool.length) {
       this.hb.push(this.pool.pop()); this.sfx.draw(); this.drawBot(); this.say('botDraw'); this.updateButtons();
-      return void this.time.delayedCall(700, () => this.botMove());
+      return void this.time.delayedCall(2200, () => this.botMove());
     }
-    this.say('botPass'); this.turn = 'p'; this.time.delayedCall(900, () => this.next());
+    this.say('botPass'); this.turn = 'p'; this.busy = true; this.time.delayedCall(2600, () => { this.busy = false; this.next(); });
   }
 
   takeBazar() {
@@ -253,7 +273,7 @@ class Game extends Phaser.Scene {
     this.updateButtons(); this.layoutHand();
   }
 
-  pass() { this.turn = 'b'; this.say('pass'); this.next(); }
+  pass() { this.turn = 'b'; this.busy = true; this.say('pass'); this.updateButtons(); this.time.delayedCall(2200, () => { this.busy = false; this.next(); }); }
 
   checkEnd() {
     const fin = (msg, key, snd) => {
